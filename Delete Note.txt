@@ -1,2 +1,0 @@
-      <note tick=".*" />
-      <note tick=".*" ins="1" />

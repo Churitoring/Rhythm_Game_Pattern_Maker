@@ -1,8 +1,9 @@
-from cx_Freeze import setup, Executable
+#python setup.py build
+from cx_Freeze import setup, Executable 
 
 setup(
-    name="DPC Frame Maker",
+    name="Rhythm Game Pattern Maker",
     version="0.0.1",
-    description="DPC Frame Maker Made By Churitoring",
-    executables=[Executable("dfmc.py", icon="dfmc.ico")]
+    description="Rhythm Game Pattern Maker By Churitoring",
+    executables=[Executable("RGPM.py", icon="RGPM.ico")]
 )
