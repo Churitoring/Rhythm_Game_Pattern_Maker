@@ -9,7 +9,8 @@ import webbrowser
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def adjusting_the_bpm():
+
+def main_engine(key_list, handler_func, context):
     userBPM = input("Please enter BPM. (default: Do not use automatic arrangement)\n")
     try:
         sysBPM = round(float(userBPM), 2)
@@ -24,44 +25,234 @@ def adjusting_the_bpm():
             if sysBeats == 0: sysBeats = 4
         except ValueError:
             sysBeats = 4
+    
     clear_screen()
-    return sysBPM, sysBeats
+    timeMS_input = input("Please enter the start time.\n(default: 0ms)\n")
+    clear_screen()
+    
+    try:
+        timeMS = int(timeMS_input)
+    except ValueError:
+        timeMS = 0
+    
+    customStartMS = timeMS + 1
+    
+    startNote = False
+    prev_time = win32api.GetTickCount()
+    context['startNote'] = startNote
 
-def adjust_start_time():
-    global timeMS
+    while True:
+        current_time = win32api.GetTickCount()
+        elapsed_time = current_time - prev_time
+
+        if elapsed_time >= 1:
+            timeMS += elapsed_time
+            prev_time = current_time
+        
+        if startNote == False:
+            timeMS = customStartMS
+
+        if sysBPM > 0:
+            beat_interval = 60000 / (sysBPM * sysBeats)
+            quotient = timeMS // beat_interval
+            lower_multiple = beat_interval * quotient
+            upper_multiple = beat_interval * (quotient + 1)
+
+            if abs(timeMS - lower_multiple) <= abs(timeMS - upper_multiple):
+                timeMStoBPM = round(lower_multiple)
+            else:
+                timeMStoBPM = round(upper_multiple)
+        else:
+            timeMStoBPM = timeMS
+        
+        if msvcrt.kbhit():
+            try:
+                input_char = msvcrt.getch().decode()
+            except UnicodeDecodeError:
+                continue
+
+            if input_char in key_list:
+                if not startNote:
+                    startNote = True
+                    context['startNote'] = True
+                
+                sound_effect.play()
+                handler_func(input_char, timeMStoBPM, context)
+
+
+def osu_engine(key_list, key_handler_func):
+    clear_screen()
+    
+    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
+    clear_screen()
+    try:
+        spinnerLength = int(spinnerLength_input)
+    except ValueError:
+        spinnerLength = 5000
+        
+    context = {
+        'key_list': key_list,
+        'key_handler_func': key_handler_func,
+        'spinnerLength': spinnerLength
+    }
+    
+    main_engine(key_list, _handler_osu, context)
+
+def dpc_engine(key_count, input_msg, use_ins_attr):
+    all_keys = list(dpc_key()) 
+    tracks_initial = all_keys[:key_count]
+    
+    print(f"Please enter {key_count} keys.")
+    key_inputs = input(input_msg + "\n")
+    key_list = list(key_inputs)
+    clear_screen()
+
+    tps = float(input("Please enter tps.\n"))
+    clear_screen()
+
+    ins_str = ' ins="1"' if use_ins_attr else ""
+    
+    context = {
+        'key_list': key_list,
+        'tracks': tracks_initial,
+        'tps': tps,
+        'ins_str': ins_str
+    }
+    
+    main_engine(key_list, _handler_dpc, context)
+
+def rd_engine(mode):
+    key_inputs = input("Please enter 4 keys. (Classic x 2, Oneshot x 2)\n")
+    key_list = list(key_inputs)
+    clear_screen()
+
+    userBPM = input("Please enter BPM.\n")
+    clear_screen()
+
     timeMS_input = input("Please enter the start time.\n(default: 0ms)\n")
     clear_screen()
     try:
         timeMS = int(timeMS_input)
     except ValueError:
         timeMS = 0
-    customStartMS = timeMS + 1
-    return customStartMS
-
-def update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats):
-    global timeMS
-    current_time = win32api.GetTickCount()
-    elapsed_time = current_time - prev_time
-
-    if elapsed_time >= 1:
-        timeMS += elapsed_time  # Add the elapsed time
-        prev_time = current_time  # Update with the current time
-    if startNote == False:
-        timeMS = customStartMS
-
-    if sysBPM > 0:
-        quotient = timeMS // (60000 / (sysBPM * sysBeats))
-        lower_multiple = (60000 / (sysBPM * sysBeats)) * quotient
-        upper_multiple = (60000 / (sysBPM * sysBeats)) * (quotient + 1)
-
-        if abs(timeMS - lower_multiple) <= abs(timeMS - upper_multiple):
-            timeMStoBPM = round(lower_multiple)
-        else:
-            timeMStoBPM = round(upper_multiple)
-    else:
-        timeMStoBPM = timeMS
     
-    return timeMStoBPM, prev_time
+    rd_sysBPM = 60000 / round(float(userBPM), 2)
+    customStartMS = timeMS + 1
+
+    if mode == 1:
+        key_configs = [
+            {"type": "AddClassicBeat", "row": 0},
+            {"type": "AddClassicBeat", "row": 1},
+            {"type": "AddOneshotBeat", "row": 2},
+            {"type": "AddOneshotBeat", "row": 3},
+        ]
+    else:
+        key_configs = [
+            {"type": "AddClassicBeat", "row": 0, "pulseType": "Wave", "tick": 1.333333},
+            {"type": "AddClassicBeat", "row": 1, "pulseType": "Wave", "tick": 1.333333},
+            {"type": "AddOneshotBeat", "row": 2, "pulseType": "Wave", "tick": 8},
+            {"type": "AddOneshotBeat", "row": 3, "pulseType": "Wave", "tick": 8},
+        ]
+
+    context = {
+        'key_list': key_list,
+        'rd_sysBPM': rd_sysBPM,
+        'key_configs': key_configs,
+        'rd_version': mode
+    }
+
+    main_engine(key_list, _handler_rd, 120, 4, customStartMS, context)
+
+def fnf_engine():
+    key_inputs = input("Please enter 4 keys. (Left, Down, Up, Right)\n")
+    key_list = list(key_inputs)
+    clear_screen()
+
+    context = {
+        'key_list': key_list
+    }
+
+    main_engine(key_list, _handler_fnf, context)
+
+
+def _handler_osu(key, current_time, context):
+    func = context['key_handler_func']
+    key_list = context['key_list']
+    spinnerLength = context['spinnerLength']
+    
+    func(key, key_list, current_time, spinnerLength)
+
+def _handler_dpc(key, current_time, context):
+    key_list = context['key_list']
+    idx = key_list.index(key)
+    
+    tick = round(current_time * context['tps'] / 1000)
+    ins_str = context['ins_str']
+    
+    context['tracks'][idx] += f'\n      <note tick="{tick}"{ins_str}/>'
+    
+    clear_screen()
+    output_str = ""
+    for track_content in context['tracks']:
+        output_str += f"{track_content}\n    </track>\n"
+    print(output_str)
+
+def _handler_rd(key, current_time, context):
+    sysBPM = context['rd_sysBPM']
+    
+    gameBeat = int(current_time / sysBPM % 8) + 1
+    gameBar = int(current_time / (sysBPM * 8)) + 1
+    if context['rd_version'] == 2:
+         gameBar = int(current_time / (sysBPM * 8))
+
+    key_list = context['key_list']
+    idx = key_list.index(key)
+    
+    config = context['key_configs'][idx]
+    
+    output_value = f'"y": {idx}, "type": "{config["type"]}", "row": {config["row"]}'
+    
+    if "pulseType" in config:
+        output_value += f', "pulseType": "{config["pulseType"]}", "tick": {config["tick"]}'
+    else:
+        output_value += ', "pulseType": "Wave", "tick": 0'
+
+    print(f'    {{ "bar": {gameBar}, "beat": {gameBeat}, {output_value} }},')
+
+def _handler_fnf(key, current_time, context):
+    key_list = context['key_list']
+    idx = key_list.index(key)
+    print(f"[{current_time},{idx},0],")
+
+
+def key_catch(input_char, key_list, timeMStoBPM, spinnerLength):
+    key_index = key_list.index(input_char)
+    output_value = None
+
+    match key_index:
+        case 0: output_value = 0
+        case 1: output_value = 57
+        case 2: output_value = 114
+        case 3: output_value = 171
+        case 4: output_value = 228
+        case 5: output_value = 285
+        case 6: output_value = 342
+        case 7: output_value = 399
+        case 8: output_value = 456
+        case 9: output_value = 512
+        case 10: 
+            print(f"256,192,{timeMStoBPM},12,0,{timeMStoBPM+spinnerLength},0:0:0:0:")
+
+    if output_value is not None:
+        print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
+
+def key3(input_char, key_list, timeMStoBPM, spinnerLength):
+    if input_char == key_list[0]:
+        print(f"512,384,{timeMStoBPM},1,0,0:0:0:0:")
+    elif input_char == key_list[1]:
+        print(f"512,384,{timeMStoBPM},1,0,0:0:0:0:")
+    elif input_char == key_list[2]:
+        print(f"512,384,{timeMStoBPM},12,0,{timeMStoBPM+spinnerLength},0:0:0:0:")
 
 def key10(input_char, key_list, timeMStoBPM, spinnerLength):
     index = key_list.index(input_char)
@@ -120,1360 +311,151 @@ def dpc_key():
     key10="    <track idx=\"9\">"
     return key1, key2, key3, key4, key5, key6, key7, key8, key9, key10
 
+
 # SELECT
 def MAIN():
-    print("Rhythm Game Pattern Maker ver. 0.0.1")
-    time.sleep(0.2)
-    print("By Churitoring\n")
-    time.sleep(0.2)
-    print("1: osu!")
-    time.sleep(0.05)
-    print("2: Rhythm Doctor (Beta Version)")
-    time.sleep(0.05)
-    print("3: Friday Night Funkin' (Beta Version)")
-    time.sleep(0.05)
-    print("4: DPC(DJMAX PATTERN-DESIGN CHALLENGE)")
-    time.sleep(0.05)
-    print("\n\n0: Go To Youtube & Github Releases Page")
-    time.sleep(0.1)
-    print("\n\nEXIT: Ctrl+C")
-    time.sleep(0.1)
+    menu = [
+        ("Rhythm Game Pattern Maker ver. 0.0.2", 0.2),
+        ("By Churitoring\n", 0.2),
+        ("1: osu!", 0.05),
+        ("2: Rhythm Doctor (Beta Version)", 0.05),
+        ("3: Friday Night Funkin' (Beta Version)", 0.05),
+        ("4: DPC(DJMAX PATTERN-DESIGN CHALLENGE)", 0.05),
+        ("\n\n0: Go To Youtube & Github Releases Page", 0.1),
+        ("\n\nEXIT: Ctrl+C", 0.1)
+    ]
+    for text, delay in menu:
+        print(text)
+        time.sleep(delay)
 
-    MAIN_SELECT()
-
-def MAIN_SELECT():
-    mode_input=input(f"\n\nPlease enter numbers only.\n\n")
+    mode_input = input("\n\nPlease enter numbers only.\n\n")
     clear_screen()
-    if mode_input=="0":
-        GITHUB()
-    elif mode_input=="1":
-        OSU()
-    elif mode_input=="2":
-        RD()
-    elif mode_input=="3":
-        FNF()
-    elif mode_input=="4":
-        DPC()
-    else : MAIN()
+
+    match mode_input:
+        case "0": GITHUB()
+        case "1": OSU()
+        case "2": RD()
+        case "3": FNF()
+        case "4": DPC()
+        case _: MAIN()
 
 
 # OSU
 def OSU():
-    print("osu!\n")
-    time.sleep(0.2)
-    print("1: Mania 1K")
-    time.sleep(0.05)
-    print("2: Mania 2K")
-    time.sleep(0.05)
-    print("3: Mania 3K")
-    time.sleep(0.05)
-    print("4: Mania 4K")
-    time.sleep(0.05)
-    print("5: Mania 5K")
-    time.sleep(0.05)
-    print("6: Mania 6K")
-    time.sleep(0.05)
-    print("7: Mania 7K")
-    time.sleep(0.05)
-    print("8: Mania 8K")
-    time.sleep(0.05)
-    print("9: Mania 9K")
-    time.sleep(0.05)
-    print("10: Mania Co-op 5K")
-    time.sleep(0.05)
-    print("11: Mania Co-op 6K")
-    time.sleep(0.05)
-    print("12: Mania Co-op 7K")
-    time.sleep(0.05)
-    print("13: Mania Co-op 8K")
-    time.sleep(0.05)
-    print("14: Mania Co-op 9K")
-    time.sleep(0.05)
-    print("15: Taiko")
-    time.sleep(0.05)
-    print("\n16: Catch(BETA)")
-    time.sleep(0.05)
-    print("17: Standard(BETA)")
-    time.sleep(0.1)
-    print("\n\n0: Back To Home")
-    time.sleep(0.1)
-    OSU_SEL()
+    menu = [
+        ("osu!\n", 0.2),
+        ("1: Catch(BETA)", 0.05),
+        ("2: Standard(BETA)", 0.1),
+        ("\n\n0: Back To Home", 0.1)
+    ]
+    for text, delay in menu:
+        print(text)
+        time.sleep(delay)
 
-def OSU_SEL():
-    mode_inputOSU=input(f"\n\nPlease enter numbers only.\n\n")
+    mode_inputOSU = input("\n\nPlease enter numbers only.\n\n")
     clear_screen()
 
-    if mode_inputOSU=="0":
-        MAIN()
-    elif mode_inputOSU=="1":
-        OSU_1()
-    elif mode_inputOSU=="2":
-        OSU_2()
-    elif mode_inputOSU=="3":
-        OSU_3()
-    elif mode_inputOSU=="4":
-        OSU_4()
-    elif mode_inputOSU=="5":
-        OSU_5()
-    elif mode_inputOSU=="6":
-        OSU_6()
-    elif mode_inputOSU=="7":
-        OSU_7()
-    elif mode_inputOSU=="8":
-        OSU_8()
-    elif mode_inputOSU=="9":
-        OSU_9()
-    elif mode_inputOSU=="10":
-        OSU_10()
-    elif mode_inputOSU=="11":
-        OSU_11()
-    elif mode_inputOSU=="12":
-        OSU_12()
-    elif mode_inputOSU=="13":
-        OSU_13()
-    elif mode_inputOSU=="14":
-        OSU_14()
-    elif mode_inputOSU=="15":
-        OSU_15()
-    elif mode_inputOSU=="16":
-        OSU_16()
-    elif mode_inputOSU=="17":
-        print("1: 2 Key Mode")
-        time.sleep(0.05)
-        print("2: Keypad Mode(9 Keys)")
-        time.sleep(0.05)
-        print("3: 41 key Mode")
-        time.sleep(0.05)
-        print("4: Full Size Mode")
-        time.sleep(0.05)
-        print("\n5: Setuped Keypad Mode(9 Keys)")
-        time.sleep(0.05)
-        print("6: Setuped 41 key Mode")
-        time.sleep(0.05)
-        print("7: Setuped Full Size Mode")
-        time.sleep(0.05)
-
-        select_inputOSU=input(f"\n\nPlease enter numbers only.\n\n")
-        clear_screen()
-
-        if select_inputOSU=="1":
-            OSU_17_1()
-        if select_inputOSU=="2":
-            OSU_17_2()
-        if select_inputOSU=="3":
-            OSU_17_3()
-        if select_inputOSU=="4":
-            OSU_17_4()
-        if select_inputOSU=="5":
-            OSU_17_5()
-        if select_inputOSU=="6":
-            OSU_17_6()
-        if select_inputOSU=="7":
-            OSU_17_7()
-        else : OSU()
-    else : OSU()
-
-# OSU - mania     
-def OSU_1():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 1 key
-    key_inputs = input("Please enter one key.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 256
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_2():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 2 keys
-    key_inputs = input("Please enter 2 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-    
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 128
-                elif input_char == key_list[1]:
-                    output_value = 384
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_3():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 3 keys
-    key_inputs = input("Please enter 3 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 85
-                elif input_char == key_list[1]:
-                    output_value = 256
-                elif input_char == key_list[2]:
-                    output_value = 426
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_4():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 4 keys
-    key_inputs = input("Please enter 4 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 64
-                elif input_char == key_list[1]:
-                    output_value = 192
-                elif input_char == key_list[2]:
-                    output_value = 320
-                elif input_char == key_list[3]:
-                    output_value = 448
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_5():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 5 keys
-    key_inputs = input("Please enter 5 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 51
-                elif input_char == key_list[1]:
-                    output_value = 153
-                elif input_char == key_list[2]:
-                    output_value = 256
-                elif input_char == key_list[3]:
-                    output_value = 358
-                elif input_char == key_list[4]:
-                    output_value = 460
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_6():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 6 keys
-    key_inputs = input("Please enter 6 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 42
-                elif input_char == key_list[1]:
-                    output_value = 128
-                elif input_char == key_list[2]:
-                    output_value = 213
-                elif input_char == key_list[3]:
-                    output_value = 298
-                elif input_char == key_list[4]:
-                    output_value = 384
-                elif input_char == key_list[5]:
-                    output_value = 469
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_7():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 7 keys
-    key_inputs = input("Please enter 7 keys.")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 36
-                elif input_char == key_list[1]:
-                    output_value = 109
-                elif input_char == key_list[2]:
-                    output_value = 182
-                elif input_char == key_list[3]:
-                    output_value = 256
-                elif input_char == key_list[4]:
-                    output_value = 329
-                elif input_char == key_list[5]:
-                    output_value = 402
-                elif input_char == key_list[6]:
-                    output_value = 475
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_8():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 8 keys
-    key_inputs = input("Please enter 8 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 32
-                elif input_char == key_list[1]:
-                    output_value = 96
-                elif input_char == key_list[2]:
-                    output_value = 160
-                elif input_char == key_list[3]:
-                    output_value = 224
-                elif input_char == key_list[4]:
-                    output_value = 288
-                elif input_char == key_list[5]:
-                    output_value = 352
-                elif input_char == key_list[6]:
-                    output_value = 416
-                elif input_char == key_list[7]:
-                    output_value = 480
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_9():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 9 keys
-    key_inputs = input("Please enter 9 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-    
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 28
-                elif input_char == key_list[1]:
-                    output_value = 85
-                elif input_char == key_list[2]:
-                    output_value = 142
-                elif input_char == key_list[3]:
-                    output_value = 199
-                elif input_char == key_list[4]:
-                    output_value = 256
-                elif input_char == key_list[5]:
-                    output_value = 312
-                elif input_char == key_list[6]:
-                    output_value = 369
-                elif input_char == key_list[7]:
-                    output_value = 426
-                elif input_char == key_list[8]:
-                    output_value = 483
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_10():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 10 keys
-    key_inputs = input("Please enter 10 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 25
-                elif input_char == key_list[1]:
-                    output_value = 76
-                elif input_char == key_list[2]:
-                    output_value = 128
-                elif input_char == key_list[3]:
-                    output_value = 179
-                elif input_char == key_list[4]:
-                    output_value = 230
-                elif input_char == key_list[5]:
-                    output_value = 281
-                elif input_char == key_list[6]:
-                    output_value = 332
-                elif input_char == key_list[7]:
-                    output_value = 384
-                elif input_char == key_list[8]:
-                    output_value = 435
-                elif input_char == key_list[9]:
-                    output_value = 486
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_11():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 12 keys
-    key_inputs = input("Please enter 12 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 21
-                elif input_char == key_list[1]:
-                    output_value = 64
-                elif input_char == key_list[2]:
-                    output_value = 106
-                elif input_char == key_list[3]:
-                    output_value = 149
-                elif input_char == key_list[4]:
-                    output_value = 192
-                elif input_char == key_list[5]:
-                    output_value = 234
-                elif input_char == key_list[6]:
-                    output_value = 277
-                elif input_char == key_list[7]:
-                    output_value = 320
-                elif input_char == key_list[8]:
-                    output_value = 362
-                elif input_char == key_list[9]:
-                    output_value = 405
-                elif input_char == key_list[10]:
-                    output_value = 448
-                elif input_char == key_list[11]:
-                    output_value = 490
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_12():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 14 keys
-    key_inputs = input("Please enter 14 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 18
-                elif input_char == key_list[1]:
-                    output_value = 54
-                elif input_char == key_list[2]:
-                    output_value = 91
-                elif input_char == key_list[3]:
-                    output_value = 128
-                elif input_char == key_list[4]:
-                    output_value = 164
-                elif input_char == key_list[5]:
-                    output_value = 201
-                elif input_char == key_list[6]:
-                    output_value = 237
-                elif input_char == key_list[7]:
-                    output_value = 274
-                elif input_char == key_list[8]:
-                    output_value = 310
-                elif input_char == key_list[9]:
-                    output_value = 347
-                elif input_char == key_list[10]:
-                    output_value = 384
-                elif input_char == key_list[11]:
-                    output_value = 420
-                elif input_char == key_list[12]:
-                    output_value = 457
-                elif input_char == key_list[13]:
-                    output_value = 493
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_13():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 16 keys
-    key_inputs = input("Please enter 16 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 16
-                elif input_char == key_list[1]:
-                    output_value = 48
-                elif input_char == key_list[2]:
-                    output_value = 80
-                elif input_char == key_list[3]:
-                    output_value = 112
-                elif input_char == key_list[4]:
-                    output_value = 144
-                elif input_char == key_list[5]:
-                    output_value = 176
-                elif input_char == key_list[6]:
-                    output_value = 208
-                elif input_char == key_list[7]:
-                    output_value = 240
-                elif input_char == key_list[8]:
-                    output_value = 272
-                elif input_char == key_list[9]:
-                    output_value = 304
-                elif input_char == key_list[10]:
-                    output_value = 336
-                elif input_char == key_list[11]:
-                    output_value = 368
-                elif input_char == key_list[12]:
-                    output_value = 400
-                elif input_char == key_list[13]:
-                    output_value = 432
-                elif input_char == key_list[14]:
-                    output_value = 464
-                elif input_char == key_list[15]:
-                    output_value = 496
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_14():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 18 keys
-    key_inputs = input("Please enter 18 keys.\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 14
-                elif input_char == key_list[1]:
-                    output_value = 42
-                elif input_char == key_list[2]:
-                    output_value = 71
-                elif input_char == key_list[3]:
-                    output_value = 99
-                elif input_char == key_list[4]:
-                    output_value = 128
-                elif input_char == key_list[5]:
-                    output_value = 156
-                elif input_char == key_list[6]:
-                    output_value = 184
-                elif input_char == key_list[7]:
-                    output_value = 213
-                elif input_char == key_list[8]:
-                    output_value = 241
-                elif input_char == key_list[9]:
-                    output_value = 270
-                elif input_char == key_list[10]:
-                    output_value = 298
-                elif input_char == key_list[11]:
-                    output_value = 327
-                elif input_char == key_list[12]:
-                    output_value = 355
-                elif input_char == key_list[13]:
-                    output_value = 384
-                elif input_char == key_list[14]:
-                    output_value = 412
-                elif input_char == key_list[15]:
-                    output_value = 440
-                elif input_char == key_list[16]:
-                    output_value = 469
-                elif input_char == key_list[17]:
-                    output_value = 497
-                print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-# OSU - Beta Version
-def OSU_15():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 9 keys
-    key_inputs = input("Please enter 9 keys.\n(Red Red Blue Blue BigRed BigRed BigBlue BigBlue Spinner)\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    # Adjusting the spinner length
-    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
-    clear_screen()
-    try:
-        spinnerLength = int(spinnerLength_input)
-    except ValueError:
-        spinnerLength = 5000
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    print(f"256,192,{timeMStoBPM},5,0,0:0:0:0:")
-                elif input_char == key_list[1]:
-                    print(f"256,192,{timeMStoBPM},5,0,0:0:0:0:")
-                elif input_char == key_list[2]:
-                    print(f"256,192,{timeMStoBPM},1,2,0:0:0:0:")
-                elif input_char == key_list[3]:
-                    print(f"256,192,{timeMStoBPM},1,2,0:0:0:0:")
-                elif input_char == key_list[4]:
-                    print(f"256,192,{timeMStoBPM},1,4,0:0:0:0:")
-                elif input_char == key_list[5]:
-                    print(f"256,192,{timeMStoBPM},1,4,0:0:0:0:")
-                elif input_char == key_list[6]:
-                    print(f"256,192,{timeMStoBPM},1,6,0:0:0:0:")
-                elif input_char == key_list[7]:
-                    print(f"256,192,{timeMStoBPM},1,6,0:0:0:0:")
-                elif input_char == key_list[8]:
-                    print(f"512,384,{timeMStoBPM},12,0,{timeMStoBPM+spinnerLength},0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_16():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 11 keys
-    key_inputs = input("Please enter 11 keys.\n(The last key is the spinner.)\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    # Adjusting the spinner length
-    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
-    clear_screen()
-    try:
-        spinnerLength = int(spinnerLength_input)
-    except ValueError:
-        spinnerLength = 5000
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 0
-                elif input_char == key_list[1]:
-                    output_value = 57
-                elif input_char == key_list[2]:
-                    output_value = 114
-                elif input_char == key_list[3]:
-                    output_value = 171
-                elif input_char == key_list[4]:
-                    output_value = 228
-                elif input_char == key_list[5]:
-                    output_value = 285
-                elif input_char == key_list[6]:
-                    output_value = 342
-                elif input_char == key_list[7]:
-                    output_value = 339
-                elif input_char == key_list[8]:
-                    output_value = 456
-                elif input_char == key_list[9]:
-                    output_value = 512
-                if input_char!=key_list[10]:
-                    print(f"{output_value},192,{timeMStoBPM},1,0,0:0:0:0:")
-                if input_char==key_list[10]:
-                    print(f"256,192,{timeMStoBPM},12,0,{timeMS+spinnerLength},0:0:0:0:")
-                startNote=True
-                sound_effect.play()
+    match mode_inputOSU:
+        case "0": MAIN()
+        case "1": osu_engine(list(input("Please enter 11 keys.\n(The last key is the spinner.)\n")), key_catch)
+        case "2": OSU_Standard()
+        case _: OSU()
 
 # OSU - osu! Standard
-def OSU_17_1():
-    startNote = False
-    s = 0
-    prev_time = win32api.GetTickCount()
-
-    # Received 3 keys
-    key_inputs = input("Please enter 3 keys.\n(The last key is the spinner.)\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
+def OSU_Standard():
+    menu = [
+    ("1: 2 Key Mode", 0.05),
+    ("2: Keypad Mode(9 Keys)", 0.05),
+    ("3: 41 key Mode", 0.05),
+    ("4: Full Size Mode", 0.05),
+    ("\n5: Setuped Keypad Mode(9 Keys)", 0.05),
+    ("6: Setuped 41 key Mode", 0.05),
+    ("7: Setuped Full Size Mode", 0.05)
+    ]
+    for text, delay in menu:
+        print(text)
+        time.sleep(delay)
+    
+    select_inputOSU = input("\n\nPlease enter numbers only.\n\n")
     clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
 
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    # Adjusting the spinner length
-    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
-    clear_screen()
-    try:
-        spinnerLength = int(spinnerLength_input)
-    except ValueError:
-        spinnerLength = 5000
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    print(f"512,384,{timeMStoBPM},1,0,0:0:0:0:")
-                elif input_char == key_list[1]:
-                    print(f"512,384,{timeMStoBPM},1,0,0:0:0:0:")
-                elif input_char == key_list[2]:
-                    print(f"512,384,{timeMStoBPM},12,0,{timeMStoBPM+spinnerLength},0:0:0:0:")
-                startNote=True
-                sound_effect.play()
-
-def OSU_17_2():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-    
-    # Received 10 keys
-    key_inputs = input("Please enter 10 keys.\n(The last key is the spinner.)\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    # Adjusting the spinner length
-    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
-    clear_screen()
-    try:
-        spinnerLength = int(spinnerLength_input)
-    except ValueError:
-        spinnerLength = 5000
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                key10(input_char, key_list, timeMStoBPM, spinnerLength)
-                startNote=True
-                sound_effect.play()
-
-def OSU_17_3():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-    
-    # Received 41 keys
-    key_inputs = input("Please enter 41 keys.\n(The last key is the spinner.)\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    # Adjusting the spinner length
-    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
-    clear_screen()
-    try:
-        spinnerLength = int(spinnerLength_input)
-    except ValueError:
-        spinnerLength = 5000
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                key41(input_char, key_list, timeMStoBPM, spinnerLength)
-                startNote=True
-                sound_effect.play()
-
-def OSU_17_4():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-    
-    # Received 46 keys
-    key_inputs = input("Please enter 46 keys.\n(The last key is the spinner.)\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    # Adjusting the spinner length
-    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
-    clear_screen()
-    try:
-        spinnerLength = int(spinnerLength_input)
-    except ValueError:
-        spinnerLength = 5000
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                key46(input_char, key_list, timeMStoBPM, spinnerLength)
-                startNote=True
-                sound_effect.play()
-
-def OSU_17_5():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-    
-    key_list = list("1234567890")
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    # Adjusting the spinner length
-    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
-    clear_screen()
-    try:
-        spinnerLength = int(spinnerLength_input)
-    except ValueError:
-        spinnerLength = 5000
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                key10(input_char, key_list, timeMStoBPM, spinnerLength)
-                startNote=True
-                sound_effect.play()
-
-def OSU_17_6():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-    
-    key_list = list("234567890-wertyuiop[asdfghjkl;zxcvbnm,./1")
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    # Adjusting the spinner length
-    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
-    clear_screen()
-    try:
-        spinnerLength = int(spinnerLength_input)
-    except ValueError:
-        spinnerLength = 5000
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                key41(input_char, key_list, timeMStoBPM, spinnerLength)
-                startNote=True
-                sound_effect.play()
-
-def OSU_17_7():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    key_list = list("1234567890-=qwertyuiop[]asdfghjkl;'zxcvbnm,./`")
-
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    # Adjusting the spinner length
-    spinnerLength_input = input("Please enter the spinner length.\n(default: 5000ms)\n")
-    clear_screen()
-    try:
-        spinnerLength = int(spinnerLength_input)
-    except ValueError:
-        spinnerLength = 5000
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                key46(input_char, key_list, timeMStoBPM, spinnerLength)
-                startNote=True
-                sound_effect.play()
+    match select_inputOSU:
+        case "1": osu_engine(list(input("Please enter 3 keys.\n(The last key is the spinner.)\n")), key3)
+        case "2": osu_engine(list(input("Please enter 10 keys.\n(The last key is the spinner.)\n")), key10)
+        case "3": osu_engine(list(input("Please enter 41 keys.\n(The last key is the spinner.)\n")), key41)
+        case "4": osu_engine(list(input("Please enter 46 keys.\n(The last key is the spinner.)\n")), key46)
+        case "5": osu_engine(list("1234567890"), key10)
+        case "6": osu_engine(list("234567890-wertyuiop[asdfghjkl;zxcvbnm,./1"), key41)
+        case "7": osu_engine(list("1234567890-=qwertyuiop[]asdfghjkl;'zxcvbnm,./`"), key46)
+        case _: OSU()
 
 # Rhythm Doctor
 def RD():
-    print("Rhythm Doctor (Beta Version)\n")
-    time.sleep(0.2)
-    print("1: All Note 0 Tick")
-    time.sleep(0.05)
-    print("2: 1.3 Tick & 8 Tick")
-    time.sleep(0.1)
-    print("\n\n0: Back To Home")
-    time.sleep(0.1)
-    RD_SEL()
+    menu = [
+        ("Rhythm Doctor (Beta Version)\n", 0.2),
+        ("1: All Note 0 Tick", 0.05),
+        ("2: 1.3 Tick & 8 Tick", 0.1),
+        ("\n\n0: Back To Home", 0.1)
+    ]
+    for text, delay in menu:
+        print(text)
+        time.sleep(delay)
 
-def RD_SEL():
-    mode_inputRD=input(f"\n\nPlease enter numbers only.\n\n")
-    clear_screen()
-    if mode_inputRD=="0":
-        MAIN()
-    if mode_inputRD=="1":
-        RD_1()
-    elif mode_inputRD=="2":
-        RD_2()
-    else : RD()
- 
-def RD_1():
-    global timeMS
-    startNote = False
-    prev_time = win32api.GetTickCount()
-    # Received 4 key
-    key_inputs = input("Please enter 4 keys. (Classic x 2, Oneshot x 2)\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
+    mode_inputRD = input("\n\nPlease enter numbers only.\n\n")
     clear_screen()
 
-    # Received BPM
-    userBPM = input("Please enter BPM.\n")
-    clear_screen()
-
-    # Adjusting the start time
-    timeMS_input = input("Please enter the start time.\n(default: 0ms)\n")
-    clear_screen()
-    try:
-        timeMS = int(timeMS_input)
-    except ValueError:
-        timeMS = 0
-    customStartMS = timeMS + 1
-
-    while True:
-        current_time = win32api.GetTickCount()
-        elapsed_time = current_time - prev_time
-
-        if elapsed_time >= 1:
-            timeMS += elapsed_time  # Add the elapsed time to a
-            prev_time = current_time  # Update with the current time
-            sysBPM=60000/round(float(userBPM),2)
-            gameBeat = int(timeMS/sysBPM%8)+1
-            gameBar = int(timeMS/(sysBPM*8))+1
-        if startNote==0:
-            timeMS = customStartMS
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = '"y": 0, "type": "AddClassicBeat", "row": 0'
-                elif input_char == key_list[1]:
-                    output_value = '"y": 1, "type": "AddClassicBeat", "row": 1'
-                elif input_char == key_list[2]:
-                    output_value = '"y": 2, "type": "AddOneshotBeat", "row": 2'
-                elif input_char == key_list[3]:
-                    output_value = '"y": 3, "type": "AddOneshotBeat", "row": 3'
-                print(f'	{{ "bar": {gameBar}, "beat": {gameBeat}, {output_value}, "pulseType": "Wave", "tick": 0 }},')
-                startNote=True
-                sound_effect.play()
-
-def RD_2():
-    global timeMS
-    startNote = False
-    prev_time = win32api.GetTickCount()
-    # Received 4 key
-    key_inputs = input("Please enter 4 keys. (Classic x 2, Oneshot x 2)\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-
-    # Received BPM
-    userBPM = input("Please enter BPM.\n")
-    clear_screen()
-
-    # Adjusting the start time
-    timeMS_input = input("Please enter the start time.\n(default: 0ms)\n")
-    clear_screen()
-    try:
-        timeMS = int(timeMS_input)
-    except ValueError:
-        timeMS = 0
-    customStartMS = timeMS + 1
-
-    while True:
-        current_time = win32api.GetTickCount()
-        elapsed_time = current_time - prev_time
-
-        if elapsed_time >= 1:
-            timeMS += elapsed_time  # Add the elapsed time to a
-            prev_time = current_time  # Update with the current time
-            sysBPM=60000/round(float(userBPM),2)
-            gameBeat = int(timeMS/sysBPM%8)+1
-            gameBar = int(timeMS/(sysBPM*8))
-        if startNote==0:
-            timeMS = customStartMS
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = '"y": 0, "type": "AddClassicBeat", "row": 0, "pulseType": "Wave", "tick": 1.333333'
-                elif input_char == key_list[1]:
-                    output_value = '"y": 1, "type": "AddClassicBeat", "row": 1, "pulseType": "Wave", "tick": 1.333333'
-                elif input_char == key_list[2]:
-                    output_value = '"y": 2, "type": "AddOneshotBeat", "row": 2, "pulseType": "Wave", "tick": 8'
-                elif input_char == key_list[3]:
-                    output_value = '"y": 3, "type": "AddOneshotBeat", "row": 3, "pulseType": "Wave", "tick": 8'
-                print(f'	{{ "bar": {gameBar}, "beat": {gameBeat}, {output_value} }},')
-                startNote=True
-                sound_effect.play()
+    match mode_inputRD:
+        case "0": MAIN()
+        case "1": rd_engine(1)
+        case "2": rd_engine(2)
+        case _: RD()
 
 # FNF
 def FNF():
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 4 keys
     key_inputs = input("Please enter 4 keys. (Left, Down, Up, Right)\n")
-    # Convert the input string into a list
     key_list = list(key_inputs)
     clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
 
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
+    context = {
+        'key_list': key_list
+    }
 
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        
-        # If there is input
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    output_value = 0
-                elif input_char == key_list[1]:
-                    output_value = 1
-                elif input_char == key_list[2]:
-                    output_value = 2
-                elif input_char == key_list[3]:
-                    output_value = 3
-                print(f"[{timeMStoBPM},{output_value},0],")
-                startNote=True
-                sound_effect.play()
-
+    main_engine(key_list, _handler_fnf, context)
 
 # DPC
 def DPC():
-    print("DPC(DJMAX PATTERN-DESIGN CHALLENGE)\n")
-    time.sleep(0.2)
-    print("1: 4B(Key Sound: blank)")
-    time.sleep(0.05)
-    print("2: 5B(Key Sound: blank)")
-    time.sleep(0.05)
-    print("3: 6B(Key Sound: blank)")
-    time.sleep(0.05)
-    print("4: 8B(Key Sound: blank)")
-    time.sleep(0.05)
-    print("5: 4B(Key Sound: No.0000)")
-    time.sleep(0.05)
-    print("6: 5B(Key Sound: No.0000)")
-    time.sleep(0.05)
-    print("7: 6B(Key Sound: No.0000)")
-    time.sleep(0.05)
-    print("8: 8B(Key Sound: No.0000)")
-    time.sleep(0.1)
-    print("\n9: View Delete Note Command")
-    time.sleep(0.1)
-    print("\n\n0: Back To Home")
-    time.sleep(0.1)
-    DPC_SEL()
+    menu = [
+        ("DPC(DJMAX PATTERN-DESIGN CHALLENGE)\n", 0.2),
+        ("1: 4B(Key Sound: blank)", 0.05),
+        ("2: 5B(Key Sound: blank)", 0.05),
+        ("3: 6B(Key Sound: blank)", 0.05),
+        ("4: 8B(Key Sound: blank)", 0.05),
+        ("5: 4B(Key Sound: No.0000)", 0.05),
+        ("6: 5B(Key Sound: No.0000)", 0.05),
+        ("7: 6B(Key Sound: No.0000)", 0.05),
+        ("8: 8B(Key Sound: No.0000)", 0.1),
+        ("\n9: View Delete Note Command", 0.1),
+        ("\n\n0: Back To Home", 0.1)
+    ]
+    for text, delay in menu:
+        print(text)
+        time.sleep(delay)
 
-def DPC_SEL():
-    mode_inputDPC=input(f"\n\nPlease enter numbers only.\n\n")
+    mode_inputDPC = input("\n\nPlease enter numbers only.\n\n")
     clear_screen()
-    if mode_inputDPC=="0":
-        MAIN()
-    elif mode_inputDPC=="1":
-        DPC_1()
-    elif mode_inputDPC=="2":
-        DPC_2()
-    elif mode_inputDPC=="3":
-        DPC_3()
-    elif mode_inputDPC=="4":
-        DPC_4()
-    elif mode_inputDPC=="5":
-        DPC_5()
-    elif mode_inputDPC=="6":
-        DPC_6()
-    elif mode_inputDPC=="7":
-        DPC_7()
-    elif mode_inputDPC=="8":
-        DPC_8()
-    elif mode_inputDPC=="9":
-        DPC_DELETENOTE()
-    else : DPC()
+
+    match mode_inputDPC:
+        case "0": MAIN()
+        case "1": dpc_engine(6, "LeftSide,B,B,B,B,RightSide", True)
+        case "2": dpc_engine(8, "LeftSide,B,B,(B,B),B,B,RightSide", True)
+        case "3": dpc_engine(8, "LeftSide,B,B,B,B,B,B,RightSide", True)
+        case "4": dpc_engine(10, "LeftSide,LeftB,B,B,B,B,B,B,Right8B,RightSide", True)
+        case "5": dpc_engine(6, "LeftSide,B,B,B,B,RightSide", False)
+        case "6": dpc_engine(8, "LeftSide,B,B,(B,B),B,B,RightSide", False)
+        case "7": dpc_engine(8, "LeftSide,B,B,B,B,B,B,RightSide", False)
+        case "8": dpc_engine(10, "LeftSide,LeftB,B,B,B,B,B,B,Right8B,RightSide", False)
+        case "9": DPC_DELETENOTE()
+        case _: DPC()
 
 def DPC_DELETENOTE():
     clear_screen()
@@ -1483,431 +465,26 @@ def DPC_DELETENOTE():
     clear_screen()
     DPC()
 
-# DPC - blank
-def DPC_1():
-    key1, key2, key3, key4, key5, key6, _, _, _, _ = dpc_key()
-
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 6 keys
-    key_inputs = input("Please enter 6 keys.\nLeftSide,B,B,B,B,RightSide\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-
-    # Adjusting the tps
-    tps = float(input("Please enter tps.\n"))
-    clear_screen()
-
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        # If there is input
-        tick=round(timeMStoBPM*tps/1000)
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    key1 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[1]:
-                    key2 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[2]:
-                    key3 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[3]:
-                    key4 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[4]:
-                    key5 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[5]:
-                    key6 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                startNote=True
-                sound_effect.play()
-                clear_screen()
-                print(f"{key1}\n    </track>\n{key2}\n    </track>\n{key3}\n    </track>\n{key4}\n    </track>\n{key5}\n    </track>\n{key6}\n    </track>")
-
-def DPC_2():
-    key1, key2, key3, key4, key5, key6, key7, _, _, _ = dpc_key()
-
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 8 keys
-    key_inputs = input("Please enter 8 keys.\nLeftSide,B,B,(B,B),B,B,RightSide\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-    
-    # Adjusting the tps
-    tps = float(input("Please enter tps.\n"))
-    clear_screen()
-
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-    
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        # If there is input
-        tick=round(timeMStoBPM*tps/1000)
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    key1 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[1]:
-                    key2 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[2]:
-                    key3 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[3]:
-                    key4 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[4]:
-                    key4 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[5]:
-                    key5 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[6]:
-                    key6 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[7]:
-                    key7 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                startNote=True
-                sound_effect.play()
-                clear_screen()
-                print(f"{key1}\n    </track>\n{key2}\n    </track>\n{key3}\n    </track>\n{key4}\n    </track>\n{key5}\n    </track>\n{key6}\n    </track>\n{key7}\n    </track>\n")
-
-def DPC_3():
-    key1, key2, key3, key4, key5, key6, key7, key8, _, _ = dpc_key()
-
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 8 keys
-    key_inputs = input("Please enter 8 keys.\nLeftSide,B,B,B,B,B,B,RightSide\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-
-    # Adjusting the tps
-    tps = float(input("Please enter tps.\n"))
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        # If there is input
-        tick=round(timeMStoBPM*tps/1000)
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    key1 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[1]:
-                    key2 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[2]:
-                    key3 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[3]:
-                    key4 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[4]:
-                    key5 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[5]:
-                    key6 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[6]:
-                    key7 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[7]:
-                    key8 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                startNote=True
-                sound_effect.play()
-                clear_screen()
-                print(f"{key1}\n    </track>\n{key2}\n    </track>\n{key3}\n    </track>\n{key4}\n    </track>\n{key5}\n    </track>\n{key6}\n    </track>\n{key7}\n    </track>\n{key8}\n    </track>\n")
-
-def DPC_4():
-    key1, key2, key3, key4, key5, key6, key7, key8, key9, key10 = dpc_key()
-
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 10 keys
-    key_inputs = input("Please enter 10 keys.\nLeftSide,LeftB,B,B,B,B,B,B,Right8B,RightSide\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-
-    # Adjusting the tps
-    tps = float(input("Please enter tps.\n"))
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        # If there is input
-        tick=round(timeMStoBPM*tps/1000)
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    key1 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[1]:
-                    key2 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[2]:
-                    key3 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[3]:
-                    key4 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[4]:
-                    key5 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[5]:
-                    key6 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[6]:
-                    key7 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[7]:
-                    key8 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[8]:
-                    key9 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                elif input_char == key_list[9]:
-                    key10 += f"\n      <note tick=\"{tick}\" ins=\"1\"/>"
-                startNote=True
-                sound_effect.play()
-                clear_screen()
-                print(f"{key1}\n    </track>\n{key2}\n    </track>\n{key3}\n    </track>\n{key4}\n    </track>\n{key5}\n    </track>\n{key6}\n    </track>\n{key7}\n    </track>\n{key8}\n    </track>\n{key9}\n    </track>\n{key10}\n    </track>\n")
-
-# DPC - No.0000
-def DPC_5():
-    key1, key2, key3, key4, key5, key6, _, _, _, _ = dpc_key()
-
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 6 keys
-    key_inputs = input("Please enter 6 keys.\nLeftSide,B,B,B,B,RightSide\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-
-    # Adjusting the tps
-    tps = float(input("Please enter tps.\n"))
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)        # If there is input
-        tick=round(timeMStoBPM*tps/1000)
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    key1 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[1]:
-                    key2 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[2]:
-                    key3 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[3]:
-                    key4 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[4]:
-                    key5 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[5]:
-                    key6 += f"\n      <note tick=\"{tick}\"/>"
-                startNote=True
-                sound_effect.play()
-                clear_screen()
-                print(f"{key1}\n    </track>\n{key2}\n    </track>\n{key3}\n    </track>\n{key4}\n    </track>\n{key5}\n    </track>\n{key6}\n    </track>\n")
-
-def DPC_6():
-    key1, key2, key3, key4, key5, key6, key7, _, _, _ = dpc_key()
-
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 8 keys
-    key_inputs = input("Please enter 8 keys.\nLeftSide,B,B,(B,B),B,B,RightSide\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-
-    # Adjusting the tps
-    tps = float(input("Please enter tps.\n"))
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        # If there is input
-        tick=round(timeMStoBPM*tps/1000)
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    key1 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[1]:
-                    key2 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[2]:
-                    key3 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[3]:
-                    key4 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[4]:
-                    key4 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[5]:
-                    key5 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[6]:
-                    key6 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[7]:
-                    key7 += f"\n      <note tick=\"{tick}\"/>"
-                startNote=True
-                sound_effect.play()
-                clear_screen()
-                print(f"{key1}\n    </track>\n{key2}\n    </track>\n{key3}\n    </track>\n{key4}\n    </track>\n{key5}\n    </track>\n{key6}\n    </track>\n{key7}\n    </track>\n")
-
-def DPC_7():
-    key1, key2, key3, key4, key5, key6, key7, key8, _, _ = dpc_key()
-
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 8 keys
-    key_inputs = input("Please enter 8 keys.\nLeftSide,B,B,B,B,B,B,RightSide\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-
-    # Adjusting the tps
-    tps = float(input("Please enter tps.\n"))
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-    
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        # If there is input
-        tick=round(timeMStoBPM*tps/1000)
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    key1 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[1]:
-                    key2 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[2]:
-                    key3 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[3]:
-                    key4 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[4]:
-                    key5 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[5]:
-                    key6 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[6]:
-                    key7 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[7]:
-                    key8 += f"\n      <note tick=\"{tick}\"/>"
-                startNote=True
-                sound_effect.play()
-                clear_screen()
-                print(f"{key1}\n    </track>\n{key2}\n    </track>\n{key3}\n    </track>\n{key4}\n    </track>\n{key5}\n    </track>\n{key6}\n    </track>\n{key7}\n    </track>\n{key8}\n    </track>\n")
-
-def DPC_8():
-    key1, key2, key3, key4, key5, key6, key7, key8, key9, key10 = dpc_key()
-
-    startNote = False
-    prev_time = win32api.GetTickCount()
-
-    # Received 10 keys
-    key_inputs = input("Please enter 10 keys.\nLeftSide,LeftB,B,B,B,B,B,B,Right8B,RightSide\n")
-    # Convert the input string into a list
-    key_list = list(key_inputs)
-    clear_screen()
-
-    # Adjusting the tps
-    tps = float(input("Please enter tps.\n"))
-    clear_screen()
-    
-    # Adjusting the BPM
-    sysBPM, sysBeats = adjusting_the_bpm()
-
-    # Adjusting the start time
-    customStartMS = adjust_start_time()
-
-    while True:
-        timeMStoBPM, prev_time = update_time(prev_time, startNote, customStartMS, sysBPM, sysBeats)
-        # If there is input
-        tick=round(timeMStoBPM*tps/1000)
-        if msvcrt.kbhit():
-            # Read the input value and print it
-            input_char = msvcrt.getch().decode()
-            if input_char in key_list:
-                if input_char == key_list[0]:
-                    key1 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[1]:
-                    key2 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[2]:
-                    key3 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[3]:
-                    key4 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[4]:
-                    key5 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[5]:
-                    key6 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[6]:
-                    key7 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[7]:
-                    key8 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[8]:
-                    key9 += f"\n      <note tick=\"{tick}\"/>"
-                elif input_char == key_list[9]:
-                    key10 += f"\n      <note tick=\"{tick}\"/>"
-                startNote=True
-                sound_effect.play()
-                clear_screen()
-                print(f"{key1}\n    </track>\n{key2}\n    </track>\n{key3}\n    </track>\n{key4}\n    </track>\n{key5}\n    </track>\n{key6}\n    </track>\n{key7}\n    </track>\n{key8}\n    </track>\n{key9}\n    </track>\n{key10}\n    </track>\n")
-
 
 # Github
 def GITHUB():
     webbrowser.open_new('https://www.youtube.com/@churitoring')
     webbrowser.open_new('https://github.com/Churitoring/Rhythm_Game_Pattern_Maker/releases')
-    clear_screen()
-    print("Open!\nBack to Home!\n3")
-    time.sleep(1)
-    clear_screen()
-    print("Open!\nBack to Home!\n2")
-    time.sleep(1)
-    clear_screen()
-    print("Open!\nBack to Home!\n1")
-    time.sleep(1)
+
+    countdown_steps = [
+        ("Open!\nBack to Home!\n3", 1),
+        ("Open!\nBack to Home!\n2", 1),
+        ("Open!\nBack to Home!\n1", 1)
+    ]
+
+    for text, delay in countdown_steps:
+        clear_screen()
+        print(text)
+        time.sleep(delay)
+
     clear_screen()
     MAIN()
+
 
 # MAIN
 pygame.mixer.init(buffer=2)

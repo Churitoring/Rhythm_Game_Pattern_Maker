@@ -3,7 +3,7 @@ from cx_Freeze import setup, Executable
 
 setup(
     name="Rhythm Game Pattern Maker",
-    version="0.0.1",
+    version="0.0.2",
     description="Rhythm Game Pattern Maker By Churitoring",
     executables=[Executable("RGPM.py", icon="RGPM.ico")]
 )
